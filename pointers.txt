@@ -1,0 +1,16 @@
+Developed a high-throughput streaming pipeline using Kafka to ingest real-time telemetry from live gaming events, ensuring sub-second data processing.
+Engineered a low-latency AI inference engine that continuously analyzes live telemetry streams to generate real-time, contextual commentary and identify critical match-turning moments.
+Enhanced AI latency and prompt-chaining to deliver real-time updates during high-speed gameplay events.
+
+Firstly we would begin with Torn City Racing events commentary. 
+
+https://www.torn.com/swagger.php#/ 
+You can follow the above link to access racing APIs
+
+https://www.torn.com/page.php?sid=racing
+This is the direct racing page, not sure how will u acess that
+
+Plan is to give a live commentary for these races, via discord chanel or any other.  We can also use taperMonkey scripting to get this job done. 
+
+LcKaMge5bZ08L7vv
+Public Api Key, but don't use too much. 
