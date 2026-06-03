@@ -21,7 +21,9 @@ if hasattr(sys.stdout, 'reconfigure'):
 
 OUT_DIR = Path("spy_results")
 OUT_DIR.mkdir(exist_ok=True)
-session_file = OUT_DIR / f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
+_stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+session_file = OUT_DIR / f"session_{_stamp}.jsonl"   # raw frames
+events_file  = OUT_DIR / f"events_{_stamp}.jsonl"    # detected events (for commentary worker)
 
 update_count = 0
 detector = EventDetector()   # stateful across the whole race
@@ -75,10 +77,11 @@ def handle_race_state(ev):
               f"Last lap: {my_info.get('last_lap','?')}  ·  "
               f"Position: {my_info.get('position','?')}")
 
-    # --- Print detected events (priority-sorted, highest first) ---
+    # --- Print + persist detected events (priority-sorted, highest first) ---
     for e in sorted(events, key=lambda x: -x['priority']):
-        stars = '*' * e['priority']
         print(f"  [EVENT P{e['priority']}] {e['type']:<13} {e['message']}")
+        with open(events_file, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(e) + '\n')
 
     # --- Canvas marker debug ---
     cm = data.get('canvas_markers')
@@ -143,6 +146,7 @@ def main():
     print(f"  TORN RACING SPY  —  Live Leaderboard Listener")
     print(f"  http://localhost:{port}")
     print(f"  Session log: {session_file.resolve()}")
+    print(f"  Events log : {events_file.resolve()}")
     print(f"{'#'*62}\n")
     print("  Waiting for race data...\n")
     sys.stdout.flush()
