@@ -122,6 +122,26 @@ def test_battle_cooldown_suppresses_repeats():
     assert 'battle' in types(e3)
 
 
+# --- heartbeat ------------------------------------------------------------
+def test_race_update_heartbeat_fires_after_interval():
+    det = EventDetector()
+    # first frame: starts race + arms the tick clock (no race_update yet)
+    e1 = det.process(frame([driver(1, 'A', 50), driver(2, 'B', 49)], 1000))
+    assert 'race_update' not in types(e1)
+    # 50s later (> TICK_INTERVAL 45s) → heartbeat with standings
+    e2 = det.process(frame([driver(1, 'A', 55), driver(2, 'B', 54)], 51000))
+    ru = [e for e in e2 if e['type'] == 'race_update']
+    assert ru, "expected a race_update heartbeat"
+    assert ru[0]['data']['leader'] == 'A'
+    assert 'B' in ru[0]['message']
+
+def test_race_update_not_before_interval():
+    det = EventDetector()
+    det.process(frame([driver(1, 'A', 50), driver(2, 'B', 49)], 1000))
+    e2 = det.process(frame([driver(1, 'A', 51), driver(2, 'B', 50)], 10000))  # only 9s later
+    assert 'race_update' not in types(e2)
+
+
 # --- robustness -----------------------------------------------------------
 def test_empty_drivers_no_crash():
     det = EventDetector()

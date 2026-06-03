@@ -1,0 +1,3 @@
+{"ts": 1780500710.435, "time": "21:01:50", "type": "race_update", "priority": 3, "text": "Lockup is cruising to the line, while Star_Vader is a massive 165% of a lap back!", "latency_s": 18.1}
+{"ts": 1780500755.557, "time": "21:02:35", "type": "race_update", "priority": 3, "text": "Lockup is in complete control on this final lap, but Star_Vader is digging deep from way back.", "latency_s": 47.0}
+{"ts": 1780500774.47, "time": "21:02:54", "type": "final_lap", "priority": 5, "text": "Lockup hits the final lap at Stone Park with the lead! Every nerve is on edge for a potential victory here.", "latency_s": 62.4}
