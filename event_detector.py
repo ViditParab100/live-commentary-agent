@@ -27,6 +27,7 @@ CLOSE_WINDOW = 6.0     # seconds of history used for trend detection
 CLOSE_DROP   = 0.015   # gap must shrink this many laps over the window to be "closing"
 CLOSE_RANGE  = 0.20    # only call closing when within 20% of a lap
 COOLDOWN     = 8.0     # seconds before the same (type, pair) can fire again
+TICK_INTERVAL = 45.0   # seconds between periodic race-update heartbeats
 
 
 def gap_laps(comp_ahead, comp_behind, laps):
@@ -43,6 +44,7 @@ class EventDetector:
         self.final_lap  = False
         self.finished   = False
         self.last_leader = None
+        self.last_tick  = None     # ts of last periodic race-update heartbeat
 
     # -- cooldown helper ----------------------------------------------------
     def _ready(self, etype, key, ts):
@@ -143,6 +145,21 @@ class EventDetector:
             order = ', '.join(f"P{dr['position']} {dr['name']}" for dr in drivers)
             emit('race_finished', 5, f"Chequered flag at {track}! Final order: {order}.",
                  order=[dr['name'] for dr in drivers])
+
+        # --- periodic race-update heartbeat (keeps commentary flowing in lulls) ---
+        if self.started and not self.finished:
+            if self.last_tick is None:
+                self.last_tick = ts
+            elif ts - self.last_tick >= TICK_INTERVAL:
+                self.last_tick = ts
+                parts = []
+                for dr in drivers[1:]:
+                    g = gap_laps(comp[leader['name']], comp[dr['name']], laps)
+                    parts.append(f"{dr['name']} {g*100:.0f}% of a lap back")
+                gaps = "; ".join(parts) if parts else "leading unchallenged"
+                emit('race_update', 3,
+                     f"Lap {leader_lap} of {laps} at {track}: {leader['name']} leads, {gaps}.",
+                     leader=leader['name'], lap=leader_lap)
 
         self.prev_pos = cur_pos
         self.last_leader = leader['name']

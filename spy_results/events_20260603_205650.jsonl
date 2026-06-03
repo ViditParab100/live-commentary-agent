@@ -1,0 +1,12 @@
+{"ts": 1780500395.129, "type": "race_start", "priority": 4, "message": "And they're off at Stone Park! 2 drivers: lockup, Star_Vader.", "data": {"track": "Stone Park", "laps": 10}}
+{"ts": 1780500440.206, "type": "race_update", "priority": 3, "message": "Lap 6 of 10 at Stone Park: lockup leads, Star_Vader 100% of a lap back.", "data": {"leader": "lockup", "lap": 6}}
+{"ts": 1780500485.249, "type": "race_update", "priority": 3, "message": "Lap 6 of 10 at Stone Park: lockup leads, Star_Vader 114% of a lap back.", "data": {"leader": "lockup", "lap": 6}}
+{"ts": 1780500530.285, "type": "race_update", "priority": 3, "message": "Lap 7 of 10 at Stone Park: lockup leads, Star_Vader 113% of a lap back.", "data": {"leader": "lockup", "lap": 7}}
+{"ts": 1780500575.326, "type": "race_update", "priority": 3, "message": "Lap 7 of 10 at Stone Park: lockup leads, Star_Vader 132% of a lap back.", "data": {"leader": "lockup", "lap": 7}}
+{"ts": 1780500620.417, "type": "race_update", "priority": 3, "message": "Lap 8 of 10 at Stone Park: lockup leads, Star_Vader 141% of a lap back.", "data": {"leader": "lockup", "lap": 8}}
+{"ts": 1780500665.417, "type": "race_update", "priority": 3, "message": "Lap 8 of 10 at Stone Park: lockup leads, Star_Vader 135% of a lap back.", "data": {"leader": "lockup", "lap": 8}}
+{"ts": 1780500710.435, "type": "race_update", "priority": 3, "message": "Lap 9 of 10 at Stone Park: lockup leads, Star_Vader 165% of a lap back.", "data": {"leader": "lockup", "lap": 9}}
+{"ts": 1780500755.557, "type": "race_update", "priority": 3, "message": "Lap 9 of 10 at Stone Park: lockup leads, Star_Vader 164% of a lap back.", "data": {"leader": "lockup", "lap": 9}}
+{"ts": 1780500774.47, "type": "final_lap", "priority": 5, "message": "Final lap! lockup leads onto the last lap at Stone Park.", "data": {"leader": "lockup"}}
+{"ts": 1780500800.608, "type": "race_update", "priority": 3, "message": "Lap 10 of 10 at Stone Park: lockup leads, Star_Vader 181% of a lap back.", "data": {"leader": "lockup", "lap": 10}}
+{"ts": 1780500845.681, "type": "race_update", "priority": 3, "message": "Lap 10 of 10 at Stone Park: lockup leads, Star_Vader 178% of a lap back.", "data": {"leader": "lockup", "lap": 10}}

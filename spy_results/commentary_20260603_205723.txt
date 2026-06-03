@@ -1,0 +1,5 @@
+# Live commentary — backend=sarvam model=sarvam-30b
+# started 2026-06-03T20:57:23
+
+[20:58:05] race_update (+86s)  Whoa, a nasty lockup for Star_Vader at Stone Park on that exit. He's now a full lap and 14% down, a massive swing in the race.
+[20:58:50] race_update (+31s)  Star_Vader is stuck in a lockup at the front, putting him 113% of a lap back on lap seven at Stone Park.

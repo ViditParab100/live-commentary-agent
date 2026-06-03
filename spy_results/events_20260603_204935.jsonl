@@ -1,0 +1,2 @@
+{"ts": 1780499967.375, "type": "race_start", "priority": 4, "message": "And they're off at Stone Park! 2 drivers: lockup, Star_Vader.", "data": {"track": "Stone Park", "laps": 10}}
+{"ts": 1780499967.375, "type": "battle", "priority": 4, "message": "Star_Vader is right on lockup's tail for P1 \u2014 just 2.3% of a lap between them!", "data": {"ahead": "lockup", "behind": "Star_Vader", "gap": 0.023}}
