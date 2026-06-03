@@ -1,0 +1,81 @@
+# Live commentary — backend=sarvam model=sarvam-105b
+# started 2026-06-04T03:35:58
+
+[03:35:53] battle (+8s)  BadassRabbit is breathing down LoloCoko's neck! He's right there, making a proper move for fourth place.
+[03:36:03] lead_change (+12s)  Bliss_sequence takes the lead! A stunning move to steal P1 from Spidernnam at Vector.
+[03:36:16] lead_change (+8s)  Leandria takes the lead! She's wrestled P1 away from Bliss_sequence at Vector
+[03:36:21] lead_change (+7s)  Bliss_sequence strikes back! They've re-taken the lead from Leandria at Vector
+[03:36:37] lead_change (+8s)  Another lead change at Vector! Spidernnam snatches P1 from Bliss_sequence!
+[03:36:37] lead_change (+15s)  Leandria strikes again at Vector, snatching P1 from Spidernnam! This corner is a revolving door for the lead.
+[03:36:55] lead_change (+9s)  Spidernnam dives inside at Vector and steals the lead from Leandria
+[03:37:40] battle (+9s)  Buhlockay is breathing down BulletToothKep's neck for P13, that 1.4% gap is vanishing
+[03:38:25] battle (+8s)  Buhlockay is glued to elliebob's gearbox for P13! That 2.2% gap is razor-thin
+[03:39:11] battle (+9s)  Spidernnam is defending hard, but BadassRabbit is glued to his bumper! The lead is under siege
+[03:39:56] overtake (+13s)  Leandria takes a spot from Bliss_sequence! She's right up in P4 now.
+[03:40:00] lead_change (+7s)  Profu snatches the lead from Spidernnam at Vector! That's two lead changes for the driver in P1.
+[03:40:04] lead_change (+6s)  Leandria has stolen the lead from Profu at Vector! A massive move into the front of the pack.
+[03:40:49] battle (+8s)  Andrew is right on Leandria's tail! That new lead is already being threatened
+[03:40:54] lead_change (+7s)  Squeezing past Leandria at Vector, _Andrew_ has taken the lead
+[03:41:41] battle (+8s)  BulletToothKep is all over elliebob's tail! That 1.2% gap is practically gone
+[03:41:59] lead_change (+8s)  Spidernnam snatches the lead! _Andrew_ is now second at Vector
+[03:42:44] battle (+7s)  Aberwarum is breathing down RockStarDad's neck for P3! This is a proper scrap for third place.
+[03:43:23] lead_change (+13s)  Andrew dives into Vector and steals the lead from Spidernnam! The lead changes hands again.
+[03:44:07] battle (+15s)  KuroKrysel is breathing down Stevens1523's neck for P13! That gap is down to a razor-thin 2.8% of a lap
+[03:44:53] battle (+14s)  Star_Vader is breathing down LoloCoko's neck for P10, a massive dogfight!
+[03:45:40] battle (+13s)  Star_Vader is in a real dogfight with LoloCoko for P13
+[03:46:26] battle (+9s)  ChineseGandalf is making a move! He's right up Star_Vader's exhaust pipe for P12.
+[03:46:59] lead_change (+8s)  Spidernnam strikes back! He snatches the lead from _Andrew_ right at Vector.
+[03:47:10] lead_change (+7s)  _Andrew_ snags the lead at Vector! A stunning move past Spidernnam.
+[03:47:18] lead_change (+16s)  Bliss_sequence takes P1 from _Andrew_ at Vector! _Andrew_ is now in hot pursuit
+[03:48:00] lead_change (+8s)  Andrew strikes back at Vector! He's wrestled the lead from Bliss_sequence in another stunning move at the front.
+[03:48:45] battle (+9s)  BulletToothKep is all over the back of ChineseGandalf! A 1.8% gap is all that separates them in P13!
+[03:49:31] battle (+17s)  Buhlockay is all over elliebob's gearbox at P16, looking for a move
+[03:49:44] lead_change (+12s)  Spidernnam snatches the lead from _Andrew_ at the Vector corner
+[03:50:29] battle (+8s)  Elliebob is all over Stevens1523! That 1.4% gap at P12 is a virtual lock-up, this is getting intense
+[03:50:44] lead_change (+11s)  Bliss_sequence is on the top step! They've taken the lead from Spidernnam at Vector
+[03:50:56] lead_change (+15s)  What a move from Spidernnam at Vector! He's taken the lead from Bliss_sequence
+[03:51:42] battle (+11s)  Bliss_sequence is right up BadassRabbit's rear bumper! That's a 0.2% gap in a massive scrap for P4
+[03:52:13] lead_change (+16s)  Andrew snatches P1! He's back in the lead at Vector.
+[03:52:58] battle (+15s)  KuroKrysel is breathing down Bliss_sequence's neck for P5! This is a real dogfight for fifth place.
+[03:53:44] overtake (+9s)  ChineseGandalf makes a move! He's past Star_Vader for P11
+[03:54:14] lead_change (+12s)  Spidernnam dives down the inside at Vector to take the lead from Andrew
+[03:54:58] lead_change (+8s)  A stunning move! _Andrew_ has stolen the lead from Spidernnam at Vector
+[03:55:43] overtake (+7s)  RockStarDad dives past Bliss_sequence, grabbing P9
+[03:56:28] battle (+9s)  Star_Vader is hunting down KuroKrysel for P10! He's absolutely right on his bumper, just 2.4% of a lap separating them
+[03:56:34] lead_change (+7s)  Spidernnam dives down the inside at Vector and nicks the lead from _Andrew_
+[03:57:19] battle (+10s)  BulletToothKep is breathing down Stevens1523's neck at P15, they are literally nose-to-tail! This is a serious battle for position.
+[03:58:05] battle (+8s)  Xtatik is all over _Andrew_'s gearbox for P3! _Andrew_ is going to have to defend hard.
+[03:58:51] battle (+13s)  What a gap! ChineseGandalf is right on elliebob's tail, they're practically kissing in P13
+[03:59:34] lead_change (+7s)  And Aberwarum is in the lead! He's stolen the lead from Spidernnam at Vector
+[04:00:19] battle (+12s)  And LoloCoko is breathing down Buhlockay's neck for P15! This is a knife-edge battle down in the midfield
+[04:00:28] lead_change (+7s)  Spidernnam snatches the lead from Aberwarum at Vector
+[04:01:14] battle (+8s)  Aberwarum is breathing down Star_Vader's neck! P2 is a pure nose-to-tail battle right now
+[04:01:59] battle (+8s)  Aberwarum is breathing down Star_Vader's neck for P5! This is an absolute war at the rear!
+[04:02:03] lead_change (+12s)  Spidernnam gets caught out at Vector! Profu is now in the lead.
+[04:02:27] lead_change (+8s)  Profu's lead vanishes! BadassRabbit takes P1 at Vector
+[04:03:12] battle (+7s)  Elliebob is all over Stevens1523's tail for P13! That gap is razor-thin, less than two percent of a lap separating them.
+[04:03:58] battle (+7s)  Xtatik is all over the back of ChineseGandalf! They're nose-to-tail in a huge fight for P10
+[04:04:14] lead_change (+10s)  Aberwarum is on the front! A stunning move to take the lead from BadassRabbit at Vector.
+[04:04:32] lead_change (+17s)  BadassRabbit makes a move at Vector, snatching the lead from Aberwarum
+[04:05:47] overtake (+8s)  Spidernnam snatches P3 from _Andrew_
+[04:06:32] battle (+9s)  That 2.6% gap! LoloCoko is all over the back of BulletToothKep for P15
+[04:07:18] battle (+7s)  Xtatik is making a move on BulletToothKep for P14! He's got him in his sights, just 3% of a lap back
+[04:07:46] lead_change (+8s)  Profu takes it! He just stole the lead from BadassRabbit at Vector.
+[04:08:30] battle (+12s)  ChineseGandalf is breathing down Xtatik's neck at P10, closing the gap to just three-tenths of a lap
+[04:08:52] lead_change (+12s)  Star_Vader snatches the lead from Profu! What a move at Vector.
+[04:09:37] battle (+10s)  BadassRabbit is all over Star_Vader's gearbox! The lead is up for grabs in this incredible nose-to-tail battle at the front
+[04:09:44] lead_change (+9s)  Profu takes the lead! He's just darted around Star_Vader at the Vector corner
+[04:10:29] battle (+8s)  Spidernnam is right on BadassRabbit's tail for P3! This is a bumper-to-bumper battle for the podium
+[04:11:15] battle (+7s)  A real scrap for fifth place! RockStarDad is glued to Aberwarum's bumper, separated by a mere 0.2% of a lap
+[04:12:00] battle (+12s)  Star_Vader is all over BadassRabbit's rear bumper! That P2 spot is a proper fight
+[04:12:15] lead_change (+8s)  Profu gets undercut! BadassRabbit blasts past at Vector to claim P1
+[04:12:36] lead_change (+13s)  Star_Vader snatches the lead! He takes P1 from BadassRabbit at Vector
+[04:13:21] battle (+8s)  That's a huge move! ChineseGandalf is right on the tail of Bliss_sequence for P9
+[04:13:51] lead_change (+7s)  Profu strikes back at Vector! He's wrestled the lead from Star_Vader.
+[04:14:34] battle (+14s)  LoloCoko is getting a hot lap from BulletToothKep! That gap to P15 is evaporating
+[04:15:16] final_lap (+7s)  Profu leads onto the final lap at Vector, and it's a tense charge to the finish line
+[04:16:01] battle (+6s)  Xtatik is all over ChineseGandalf's tail, that gap is just 3% of a lap!
+[04:16:46] battle (+16s)  Buhlockay is making a move for P16! He's right on LoloCoko's tail and looking to make a pass.
+[04:17:30] battle (+8s)  Buhlockay is all over the back of LoloCoko! That gap is shrinking fast for P16.
+[04:17:39] race_finished (+10s)  Profu does it! A last-lap pass for the win at Vector
+[04:17:41] race_finished (+8s)  Profu, Star_Vader, and RockStarDad on the podium! What a stacked top three at Vector

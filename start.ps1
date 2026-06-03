@@ -9,6 +9,10 @@ Get-CimInstance Win32_Process -Filter "name='python.exe'" |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
 Start-Sleep -Seconds 1
 
+# Trim old data: keep only the previous race, so once this race starts there
+# are exactly two on disk (current + previous).
+python cleanup.py --keep 1
+
 # Listener in its own window (captures the race, detects events)
 Start-Process powershell -ArgumentList '-NoExit', '-Command',
     "Set-Location '$PSScriptRoot'; python ws_listener.py"
