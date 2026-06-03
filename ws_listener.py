@@ -96,6 +96,18 @@ def handle_race_state(ev):
         for overtaker, overtaken in overtakes:
             print(f"  *** {overtaker} overtook {overtaken}! ***")
 
+    # --- Canvas marker debug ---
+    cm = data.get('canvas_markers')
+    if cm:
+        if 'error' in cm:
+            print(f"  canvas: TAINTED — {cm['error']}")
+        else:
+            markers = cm.get('markers', [])
+            mode = 'CANVAS MODE' if len(markers) >= len(drivers) else f'path mode ({len(markers)} markers, need {len(drivers)})'
+            print(f"  canvas: {cm.get('w','?')}×{cm.get('h','?')}  {len(markers)} clusters  [{mode}]")
+            for i, m in enumerate(markers[:8]):
+                print(f"    [{i}] x={m['x']:>3} y={m['y']:>3}  rgb({m['r']},{m['g']},{m['b']})  size={m['size']}")
+
     sys.stdout.flush()
 
 

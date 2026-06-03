@@ -1,160 +1,88 @@
 # Live Commentary Agent
 
-An AI-powered live commentary system for Torn City Racing events, delivering real-time, contextual race commentary via Discord (and optionally via TamperMonkey in-browser overlay).
+AI-powered live race commentary for Torn City Racing events, delivered via Discord and rendered as an in-browser overlay.
 
 ---
 
-## Architecture Overview
+## Current Status
+
+| Phase | Status | Notes |
+|---|---|---|
+| Phase 1 — API Integration | ✅ Done | Torn v2 API working; tracks, cars, race list all mapped |
+| Phase 2 — Kafka Pipeline | ⏳ Pending | Deferred; DOM polling via TamperMonkey covers Phase 1–3 needs |
+| Phase 3 — AI Commentary | ⏳ Pending | Next after live map is stable |
+| Phase 4 — Discord Delivery | ⏳ Pending | — |
+| Phase 5 — TamperMonkey Live Map | 🔄 In Progress | Canvas overlay working; canvas marker detection in testing |
+| Phase 6 — Optimisation | ⏳ Pending | — |
+
+---
+
+## Architecture (current)
 
 ```
-Torn Racing API
-      │
-      ▼
-  API Poller  ──►  Kafka Topic (race-telemetry)
-                        │
-                        ▼
-               Stream Processor
-               (race state diff)
-                        │
-                        ▼
-              AI Commentary Engine
-              (Claude, prompt-chain)
-                        │
-               ┌────────┴────────┐
-               ▼                 ▼
-         Discord Bot       TamperMonkey
-          (channel)        (in-browser)
+Torn racing page DOM
+  └── completion % per driver  ──► TamperMonkey script
+  └── canvas#raceCanvas pixels ──► marker cluster detection
+                                        │
+                                        ▼
+                               SVG overlay (on game canvas)
+                               numbered driver dots + leaderboard pill
+                                        │
+                                        ▼
+                               POST http://localhost:8766/data
+                                        │
+                                        ▼
+                               ws_listener.py  (live leaderboard + overtake detection)
 ```
 
 ---
 
-## Phases
+## How It Works
 
-### Phase 1 — Foundation & API Integration
+### TamperMonkey Script (`tampermonkey/torn_racing_spy.user.js`)
 
-**Goal:** Understand the Torn Racing data model and establish reliable polling.
+Injected into `https://www.torn.com/*`. Does three things every ~1 second (MutationObserver + interval):
 
-- Set up project structure: Python (or Node.js) with config management
-- Integrate the [Torn API](https://www.torn.com/swagger.php#/) racing endpoints:
-  - Active races (list ongoing races)
-  - Race details (positions, lap times, participant stats)
-- Implement a polling loop (configurable interval, e.g. every 3–5 seconds)
-- Log raw API responses to file for offline analysis of data structure
-- Define typed data models for: `Race`, `Participant`, `LapEvent`, `PositionChange`
-- Store API key in `.env` (never committed); document setup in this README
+1. **DOM parse** — reads `#drivers-scrollbar` for each driver's name and completion %, `div.drivers-list` for track name / lap count / race status, `div.track-wrap` for your own car's position and last lap time.
 
-**Deliverable:** A script that polls the Torn Racing API and pretty-prints live race state to the console.
+2. **Canvas marker detection** — calls `canvas#raceCanvas.getContext('2d').getImageData()`, scans for bright saturated pixel clusters (the car marker sprites), returns their centroids. When enough markers are detected (≥ number of drivers), positions are taken directly from pixel coordinates — no path math needed.
 
----
+3. **SVG overlay** — injects a transparent `<svg>` directly on top of `canvas#raceCanvas`. Numbered coloured circles are placed at either canvas marker coordinates (preferred) or path-interpolated coordinates (fallback). Your car gets a larger circle with a white ring.
 
-### Phase 2 — Kafka Streaming Pipeline
+Sends `race_state` events to `ws_listener.py` via `GM_xmlhttpRequest POST http://localhost:8766/data`.
 
-**Goal:** Decouple data ingestion from processing via a high-throughput message bus.
+### Python Listener (`ws_listener.py`)
 
-- Spin up Kafka locally via Docker Compose (single-broker dev setup)
-- Implement a **Kafka Producer** that:
-  - Publishes each API poll response as a message to a `race-telemetry` topic
-  - Keys messages by `race_id` to ensure ordered processing per race
-- Implement a **Kafka Consumer / Stream Processor** that:
-  - Consumes raw telemetry messages
-  - Computes state diffs (position changes, new lap completions, race start/finish)
-  - Publishes structured `RaceEvent` objects to a `race-events` topic
-- Define event types: `RaceStarted`, `PositionChanged`, `LapCompleted`, `RaceFinished`, `CrashDetected`
+Receives `race_state` events, prints a live leaderboard with progress bars and overtake detection, logs canvas marker debug info.
 
-**Deliverable:** A running pipeline where race events flow from API → Kafka → event stream with sub-second processing latency.
+### Track Images & Paths
 
----
-
-### Phase 3 — AI Commentary Engine
-
-**Goal:** Generate real-time, contextual commentary from the race event stream.
-
-- Consume the `race-events` Kafka topic
-- Maintain a rolling **race narrative context** (last N events, current standings, participant history)
-- Design a **prompt-chain strategy**:
-  - System prompt: commentary persona (energetic race announcer, Torn City lore)
-  - Context block: current race state, standings, notable participants
-  - Event prompt: the specific moment to commentate on
-- Integrate Claude API with streaming output for low-latency first-token delivery
-- Implement **moment detection** to prioritize high-value events:
-  - Lead changes
-  - Final lap overtakes
-  - Photo-finish scenarios
-  - Race completion
-- Rate-limit AI calls to avoid redundant commentary on minor micro-events
-- Cache participant profiles (race history, win rate) to enrich commentary context
-
-**Deliverable:** A commentary engine that takes a `RaceEvent` and returns a 1–3 sentence live commentary string within ~1 second.
-
----
-
-### Phase 4 — Discord Delivery
-
-**Goal:** Publish live commentary to a Discord channel in real time.
-
-- Create a Discord bot with `discord.py` (or `discord.js`)
-- Configure a dedicated race commentary channel (or thread per race)
-- On `RaceStarted`: post a race preview embed (participants, track, odds)
-- On commentary output: post messages with:
-  - Commentary text
-  - Current leaderboard (compact, updated in-place via message edit)
-  - Lap/position badge
-- Implement deduplication to avoid posting the same moment twice
-- Add a `!race` command to show current standings on demand
-- Handle race concurrency (multiple races running simultaneously → separate threads)
-
-**Deliverable:** A Discord bot that posts live, AI-generated commentary throughout a race from start to finish.
-
----
-
-### Phase 5 — TamperMonkey In-Browser Alternative *(Optional)*
-
-**Goal:** Deliver commentary as an overlay on the Torn racing page itself, without requiring Discord.
-
-- Write a TamperMonkey userscript that runs on `https://www.torn.com/page.php?sid=racing`
-- Extract race state directly from the page DOM (positions, timers, participant names)
-- Send extracted state to a local commentary backend via `fetch` or WebSocket
-- Receive commentary text back and inject it into the page as a styled overlay panel
-- This approach bypasses API rate limits and captures data the public API may not expose
-
-**Deliverable:** A `.user.js` script + local server that renders AI commentary inline on the Torn racing page.
-
----
-
-### Phase 6 — Optimization & Hardening
-
-**Goal:** Make the system production-grade for sustained use.
-
-- Latency profiling: measure API poll → Kafka → AI → Discord end-to-end
-- Prompt optimization: tune context window size vs. latency tradeoff
-- Kafka tuning: partition count, consumer group offsets, retention policy
-- Reconnection logic: handle Torn API downtime, Discord rate limits, Kafka broker restarts
-- Observability: structured logging, basic metrics (events/sec, AI latency p50/p99)
-- Multi-race support: stress test with N concurrent races
-- Deployment: containerize all components with Docker Compose for one-command startup
-
-**Deliverable:** A stable, containerized system that can run 24/7 with no manual intervention.
+- 85 track image codes discovered (`A1`–`E17`); letter = car class, number = track layout (17 unique tracks)
+- Track images stored in `spy_results/track_images/`
+- Fallback SVG paths auto-traced from track images using inner contour algorithm; embedded in script as `TRACK_PATHS` dictionary
 
 ---
 
 ## Setup
 
 ```bash
-# 1. Clone and install dependencies
-git clone <repo>
-cd live-commentary-agent
-pip install -r requirements.txt   # or npm install
+# Install dependencies
+pip install -r requirements.txt
 
-# 2. Configure environment
-cp .env.example .env
-# Add your Torn API key and Discord bot token to .env
+# Start listener
+python ws_listener.py
 
-# 3. Start Kafka (Phase 2+)
-docker compose up -d kafka
-
-# 4. Run the pipeline
-python main.py
+# Install TamperMonkey in Chrome
+# Create new script → paste tampermonkey/torn_racing_spy.user.js → Save
+# Hard-reload Torn page (Ctrl+Shift+R)
+# Join a race — pill appears bottom-right, dots appear on track canvas
 ```
+
+---
+
+## API Key
+
+Public Torn API key stored in `.env` (gitignored). See `.env.example`.
 
 ---
 
@@ -162,10 +90,9 @@ python main.py
 
 | Layer | Technology |
 |---|---|
-| Data ingestion | Torn REST API, Python `httpx` |
-| Message bus | Apache Kafka (Confluent / Docker) |
-| Stream processing | Kafka Consumers, Python |
-| AI inference | Claude API (streaming, prompt-chaining) |
-| Discord delivery | `discord.py` |
-| In-browser overlay | TamperMonkey userscript |
-| Containerization | Docker Compose |
+| Live data capture | TamperMonkey userscript, DOM MutationObserver, Canvas `getImageData` |
+| Map overlay | SVG injected over game canvas |
+| Local relay | Python `http.server` (port 8766) |
+| Track paths | scikit-image contour tracing from Torn track images |
+| AI commentary (next) | Claude API (streaming) |
+| Discord delivery (next) | `discord.py` |
