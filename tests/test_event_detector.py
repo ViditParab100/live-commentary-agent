@@ -142,6 +142,28 @@ def test_race_update_not_before_interval():
     assert 'race_update' not in types(e2)
 
 
+# --- race-boundary (the "8 laps behind" glitch) ---------------------------
+def test_completion_reset_skips_boundary_frame_and_no_huge_gap():
+    det = EventDetector()
+    det.process(frame([driver(1, 'A', 98), driver(2, 'B', 90)], 1000, laps=10))
+    # B finishes and resets to 15% while A still at 99% → boundary frame
+    evs = det.process(frame([driver(1, 'A', 99), driver(2, 'B', 15)], 2000, laps=10))
+    # No closing/battle/race_update with an absurd gap should be emitted
+    assert evs == []
+    # gap_hist cleared so the bogus 84%-of-race gap never enters trend detection
+    assert det.gap_hist == {}
+
+def test_new_race_restarts_after_reset():
+    det = EventDetector()
+    det.process(frame([driver(1, 'A', 95), driver(2, 'B', 90)], 1000, laps=10))
+    # drivers finish at different times → a couple of boundary frames are skipped
+    det.process(frame([driver(1, 'A', 99), driver(2, 'B', 10)], 2000, laps=10))  # B reset
+    det.process(frame([driver(1, 'A', 4),  driver(2, 'B', 12)], 3000, laps=10))  # A reset
+    # once completions are stable and rising again, the new race's start fires
+    e = det.process(frame([driver(1, 'A', 5), driver(2, 'B', 13)], 4000, laps=10))
+    assert 'race_start' in types(e)
+
+
 # --- robustness -----------------------------------------------------------
 def test_empty_drivers_no_crash():
     det = EventDetector()
