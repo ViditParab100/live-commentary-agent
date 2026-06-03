@@ -101,8 +101,12 @@ class EventDetector:
             self._reset_for_new_race()
             return events  # nothing trustworthy to say on a boundary frame
 
-        # --- race start ---
-        if not self.started and 'start' in status.lower():
+        # --- race start (first active frame) ---
+        # Trigger on active racing, not the status string: the status reflects the
+        # PLAYER's state ("Race started", but also "You crashed!", etc.) and would
+        # otherwise leave `started` False and suppress the heartbeat for the race.
+        racing_active = any(0 < comp[dr['name']] < 100 for dr in drivers)
+        if not self.started and not self.finished and racing_active:
             self.started = True
             names = ', '.join(dr['name'] for dr in drivers)
             emit('race_start', 4, f"And they're off at {track}! {len(drivers)} drivers: {names}.",

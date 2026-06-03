@@ -39,7 +39,9 @@ Each stage is a **separate process sharing files**, so a slow LLM call never sta
 | `track_mapper.py` | Builds the track centerline from car telemetry (not image tracing) and computes **along-track** gaps via arc-length `s`, not euclidean distance. |
 | `commentary_worker.py` | Consumes events (live tail or `--replay`), generates commentary via the LLM, writes `.txt` + `.jsonl`, and posts to Discord. Steady cadence (`--interval`) plus instant P5 moments. |
 | `discord_notify.py` | Posts commentary to Discord via webhook **or** bot token (REST API, no async). Reusable standalone or embedded in the worker. |
+| `cleanup.py` | Trims `spy_results/` to the N most recent races (default 2: current + previous). Track artifacts are never touched. |
 | `probe.py` | One-off Torn API explorer (v2 racing endpoints). |
+| `start.ps1` / `stop.ps1` | One-click launch/stop of the listener + worker. `start.ps1` also runs `cleanup.py` so only the current + previous race remain on disk. |
 
 ---
 
@@ -81,7 +83,7 @@ python commentary_worker.py --replay spy_results/session_<stamp>.jsonl --speed 5
 | Key | Purpose |
 |---|---|
 | `TORN_API_KEY` | Torn v2 API (track/car metadata, race list) |
-| `SARVAM_API_KEY` | Commentary LLM (auto-selected first). Good quality, but a reasoning model — ~20–90 s/line, best for steady cadence, not tick-by-tick. |
+| `SARVAM_API_KEY` | Commentary LLM (auto-selected first). Defaults to **`sarvam-105b`** — it reasons efficiently and reliably finishes within the starter-tier 4096-token cap, ~10–20 s/line. (`sarvam-30b` often over-reasons and returns null, so 105b is the default.) |
 | `ANTHROPIC_API_KEY` | Commentary LLM fallback. Claude Haiku ≈ 1–2 s/line — use for true real-time. |
 | `DISCORD_WEBHOOK_URL` | Simplest Discord output: a channel webhook (no bot needed). |
 | `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID` | Post as a bot via the Discord REST API. |

@@ -4,7 +4,10 @@ Commentary worker — consumes race events and produces live AI commentary.
 
 It is intentionally DECOUPLED from the HTTP listener: the listener stays fast
 (receive → persist → display) while this separate process does the slow work
-(calling Claude). They share the events_*.jsonl file.
+(calling the LLM). They share the events_*.jsonl file.
+
+Backend auto-selects: SARVAM_API_KEY → Sarvam (sarvam-105b), else
+ANTHROPIC_API_KEY → Claude (Haiku), else dry-run.
 
 Modes
 -----
@@ -16,10 +19,12 @@ Modes
 Options
 -------
   --min-priority N   only commentate events with priority >= N (default 3)
-  --model NAME       Claude model id (default: fast Haiku for live latency)
-  --dry-run          don't call Claude; print the prompt that WOULD be sent.
-                     Auto-enabled when ANTHROPIC_API_KEY is missing, so the whole
-                     pipeline is testable with no key and no cost.
+  --interval S       seconds between filler lines (steady cadence; default 60)
+  --model NAME       override the backend's default model id
+  --no-discord       disable posting to Discord
+  --dry-run          don't call the LLM; print the prompt that WOULD be sent.
+                     Auto-enabled when no LLM key is set, so the whole pipeline
+                     is testable with no key and no cost.
 
 Replay is the key testing tool: pipe any saved race through the exact live
 commentary path without needing a real race.
@@ -39,10 +44,6 @@ from event_detector import EventDetector
 # Force UTF-8 stdout on Windows so any characters print cleanly.
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-
-# Fast model keeps live commentary punchy and cheap across many events.
-# Override with --model claude-sonnet-4-6 for richer lines.
-DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 OUT_DIR = Path("spy_results")
 
@@ -136,7 +137,9 @@ class Commentator:
             return
         if os.getenv("SARVAM_API_KEY"):
             self.backend = "sarvam"
-            self.model = model or "sarvam-30b"
+            # 105b reasons more efficiently than 30b for short commentary, so it
+            # reliably finishes within the 4096-token starter cap (30b often nulls).
+            self.model = model or "sarvam-105b"
             self._key = os.getenv("SARVAM_API_KEY")
         elif os.getenv("ANTHROPIC_API_KEY"):
             self.backend = "anthropic"
@@ -165,16 +168,22 @@ class Commentator:
                 {"role": "user", "content": prompt},
             ],
         }
-        r = requests.post(self.SARVAM_URL,
-                          headers={"Authorization": f"Bearer {self._key}",
-                                   "Content-Type": "application/json"},
-                          json=payload, timeout=120)
-        data = r.json()
-        if "choices" not in data:
-            print(f"  [sarvam error: {data.get('error', {}).get('message', r.text[:120])}]")
-            return None
-        # None content = reasoning used the whole budget; skip rather than emit junk.
-        return (data["choices"][0]["message"].get("content") or "").strip() or None
+        # Sarvam is a reasoning model and can spend the entire 4096-token cap
+        # "thinking", returning content=None. Reasoning length varies between
+        # calls, so retry once — a second attempt often fits and yields text.
+        for attempt in range(2):
+            r = requests.post(self.SARVAM_URL,
+                              headers={"Authorization": f"Bearer {self._key}",
+                                       "Content-Type": "application/json"},
+                              json=payload, timeout=120)
+            data = r.json()
+            if "choices" not in data:
+                print(f"  [sarvam error: {data.get('error', {}).get('message', r.text[:120])}]")
+                return None
+            text = (data["choices"][0]["message"].get("content") or "").strip()
+            if text:
+                return text
+        return None  # both attempts exhausted the budget on reasoning
 
     def _anthropic(self, prompt):
         out = []
@@ -243,10 +252,10 @@ def main():
     ap.add_argument("--no-discord", action="store_true", help="disable posting to Discord")
     args = ap.parse_args()
 
-    # Load .env for ANTHROPIC_API_KEY if present
+    # Load .env (override stale system-env keys so .env is authoritative)
     try:
         from dotenv import load_dotenv
-        load_dotenv()
+        load_dotenv(override=True)
     except ImportError:
         pass
 
