@@ -13,13 +13,20 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from datetime import datetime
 from pathlib import Path
 
+from event_detector import EventDetector
+
+# Force UTF-8 output on Windows so block chars print correctly
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 OUT_DIR = Path("spy_results")
 OUT_DIR.mkdir(exist_ok=True)
-session_file = OUT_DIR / f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
+_stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+session_file = OUT_DIR / f"session_{_stamp}.jsonl"   # raw frames
+events_file  = OUT_DIR / f"events_{_stamp}.jsonl"    # detected events (for commentary worker)
 
-# Track previous driver order to detect overtakes
-prev_order: list[str] = []
 update_count = 0
+detector = EventDetector()   # stateful across the whole race
 
 
 def ts(ms):
@@ -29,25 +36,11 @@ def ts(ms):
 def bar(pct, width=20):
     if pct is None: return '?' * width
     filled = round(pct / 100 * width)
-    return '█' * filled + '░' * (width - filled)
-
-
-def detect_overtakes(old_order, new_order):
-    """Return list of (overtaker, overtaken) tuples."""
-    events = []
-    for new_pos, name in enumerate(new_order):
-        if name in old_order:
-            old_pos = old_order.index(name)
-            if old_pos > new_pos:
-                # moved up — find who they passed
-                for passed in old_order[new_pos:old_pos]:
-                    if passed in new_order:
-                        events.append((name, passed))
-    return events
+    return '#' * filled + '.' * (width - filled)
 
 
 def handle_race_state(ev):
-    global prev_order, update_count
+    global update_count
     update_count += 1
 
     data    = ev.get('data', {})
@@ -58,18 +51,15 @@ def handle_race_state(ev):
     status  = data.get('status', '?')
     t       = ts(ev.get('ts', 0))
 
-    new_order = [d['name'] for d in drivers]
-
-    # --- Detect overtakes ---
-    overtakes = detect_overtakes(prev_order, new_order) if prev_order else []
-    prev_order = new_order
+    # --- Run event detection (stateful across frames) ---
+    events = detector.process(ev)
 
     # --- Print leaderboard ---
-    print(f"\n{'─'*62}")
+    print(f"\n{'-'*62}")
     print(f"  #{update_count:<4}  {t}   {track}  ·  {laps} laps  ·  {status}")
-    print(f"{'─'*62}")
+    print(f"{'-'*62}")
     print(f"  {'POS':<4} {'DRIVER':<22} {'COMPLETION':>10}   TRACK PROGRESS")
-    print(f"  {'─'*58}")
+    print(f"  {'-'*58}")
 
     for d in drivers:
         name  = d.get('name', '?')
@@ -79,11 +69,7 @@ def handle_race_state(ev):
         flag  = ' ★' if is_me else '  '
         comp_str = f"{comp:.2f}%" if comp is not None else "   ?%"
         b = bar(comp)
-        marker = ''
-        for (overtaker, overtaken) in overtakes:
-            if name == overtaker: marker = ' ⬆ OVERTAKE!'
-            if name == overtaken: marker = ' ⬇'
-        line = f"  {pos:<4} {name[:20]+flag:<22} {comp_str:>10}   {b}{marker}"
+        line = f"  {pos:<4} {name[:20]+flag:<22} {comp_str:>10}   {b}"
         print(line)
 
     if my_info:
@@ -91,10 +77,11 @@ def handle_race_state(ev):
               f"Last lap: {my_info.get('last_lap','?')}  ·  "
               f"Position: {my_info.get('position','?')}")
 
-    if overtakes:
-        print()
-        for overtaker, overtaken in overtakes:
-            print(f"  *** {overtaker} overtook {overtaken}! ***")
+    # --- Print + persist detected events (priority-sorted, highest first) ---
+    for e in sorted(events, key=lambda x: -x['priority']):
+        print(f"  [EVENT P{e['priority']}] {e['type']:<13} {e['message']}")
+        with open(events_file, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(e) + '\n')
 
     # --- Canvas marker debug ---
     cm = data.get('canvas_markers')
@@ -159,6 +146,7 @@ def main():
     print(f"  TORN RACING SPY  —  Live Leaderboard Listener")
     print(f"  http://localhost:{port}")
     print(f"  Session log: {session_file.resolve()}")
+    print(f"  Events log : {events_file.resolve()}")
     print(f"{'#'*62}\n")
     print("  Waiting for race data...\n")
     sys.stdout.flush()
