@@ -1,6 +1,0 @@
-# Live commentary — backend=sarvam model=sarvam-30b
-# started 2026-06-03T21:01:39
-
-[21:01:50] race_update (+18s)  Lockup is cruising to the line, while Star_Vader is a massive 165% of a lap back!
-[21:02:35] race_update (+47s)  Lockup is in complete control on this final lap, but Star_Vader is digging deep from way back.
-[21:02:54] final_lap (+62s)  Lockup hits the final lap at Stone Park with the lead! Every nerve is on edge for a potential victory here.

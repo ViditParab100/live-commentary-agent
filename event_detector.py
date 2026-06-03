@@ -45,6 +45,20 @@ class EventDetector:
         self.finished   = False
         self.last_leader = None
         self.last_tick  = None     # ts of last periodic race-update heartbeat
+        self.prev_comp  = {}       # name -> completion last frame (new-race detection)
+
+    def _reset_for_new_race(self):
+        """A new race started (completions reset). Clear per-race state so the
+        next frames are treated as a fresh race rather than computing nonsense
+        gaps across the race boundary."""
+        self.prev_pos = {}
+        self.gap_hist = {}
+        self.cooldowns = {}
+        self.started = False
+        self.final_lap = False
+        self.finished = False
+        self.last_tick = None
+        self.last_leader = None
 
     # -- cooldown helper ----------------------------------------------------
     def _ready(self, etype, key, ts):
@@ -75,6 +89,17 @@ class EventDetector:
         def emit(etype, priority, message, **data):
             events.append({'ts': ts, 'type': etype, 'priority': priority,
                            'message': message, 'data': data})
+
+        # --- new-race / finish boundary detection ---
+        # completion only ever rises within a race; if ANY driver's completion
+        # drops, that driver finished and reset for the next race. The frame is
+        # then a mix of old- and new-race values, so skip it entirely to avoid
+        # garbage gaps (the "8 laps behind" bug), and reset for the new race.
+        boundary = any(comp[n] < self.prev_comp.get(n, -1) - 5 for n in comp)
+        self.prev_comp = dict(comp)
+        if boundary:
+            self._reset_for_new_race()
+            return events  # nothing trustworthy to say on a boundary frame
 
         # --- race start ---
         if not self.started and 'start' in status.lower():
