@@ -31,6 +31,7 @@ import os
 import sys
 import time
 from collections import deque
+from datetime import datetime
 from pathlib import Path
 
 from event_detector import EventDetector
@@ -119,11 +120,13 @@ class Commentator:
 
     SARVAM_URL = "https://api.sarvam.ai/v1/chat/completions"
 
-    def __init__(self, model=None, dry_run=False):
+    def __init__(self, model=None, dry_run=False, log_path=None, jsonl_path=None):
         self.recent = deque(maxlen=6)
         self.backend = "dry"
         self.model = model
         self._client = None
+        self.log_path = log_path       # human-readable .txt
+        self.jsonl_path = jsonl_path   # structured .jsonl (for Discord etc.)
 
         if dry_run:
             return
@@ -161,7 +164,7 @@ class Commentator:
         r = requests.post(self.SARVAM_URL,
                           headers={"Authorization": f"Bearer {self._key}",
                                    "Content-Type": "application/json"},
-                          json=payload, timeout=120)
+                          json=payload, timeout=90)
         data = r.json()
         if "choices" not in data:
             return f"(sarvam error: {data.get('error', {}).get('message', r.text[:120])})"
@@ -193,9 +196,25 @@ class Commentator:
             return
 
         t0 = time.time()
-        text = self._sarvam(prompt) if self.backend == "sarvam" else self._anthropic(prompt)
+        try:
+            text = self._sarvam(prompt) if self.backend == "sarvam" else self._anthropic(prompt)
+        except Exception as e:
+            # A single API timeout/error must never kill the long-running worker.
+            print(f"\n  [commentary skipped — {type(e).__name__}: {e}]", flush=True)
+            return
         dt = time.time() - t0
-        print(f"\n>> [{event['type']} +{dt:.0f}s] {text}", flush=True)
+        clock = datetime.fromtimestamp(event["ts"]).strftime("%H:%M:%S")
+        line = f"[{clock}] {event['type']} (+{dt:.0f}s)  {text}"
+        print(f"\n>> {line}", flush=True)
+        if self.log_path:
+            with open(self.log_path, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+        if self.jsonl_path:
+            rec = {"ts": event["ts"], "time": clock, "type": event["type"],
+                   "priority": event["priority"], "text": text,
+                   "latency_s": round(dt, 1)}
+            with open(self.jsonl_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(rec) + "\n")
 
 
 # --------------------------------------------------------------------------
@@ -206,7 +225,9 @@ def main():
     ap.add_argument("--events", help="specific events_*.jsonl to tail")
     ap.add_argument("--replay", help="replay a raw session_*.jsonl through the detector")
     ap.add_argument("--speed", type=float, default=10.0, help="replay speed multiplier")
-    ap.add_argument("--min-priority", type=int, default=3, help="min event priority to voice")
+    ap.add_argument("--min-priority", type=int, default=3, help="min event priority to consider")
+    ap.add_argument("--interval", type=float, default=60.0,
+                    help="seconds between filler lines (steady cadence). 0 = voice every event.")
     ap.add_argument("--model", default=None,
                     help="override model id (else each backend picks its own default)")
     ap.add_argument("--from-start", action="store_true", help="tail from start of events file")
@@ -225,9 +246,20 @@ def main():
     if dry and not args.dry_run:
         print("  [no SARVAM_API_KEY / ANTHROPIC_API_KEY found → running in --dry-run mode]\n")
 
-    comm = Commentator(model=args.model, dry_run=dry)
+    OUT_DIR.mkdir(exist_ok=True)
+    stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    log_path   = OUT_DIR / f"commentary_{stamp}.txt"
+    jsonl_path = OUT_DIR / f"commentary_{stamp}.jsonl"
+    comm = Commentator(model=args.model, dry_run=dry, log_path=log_path, jsonl_path=jsonl_path)
+    # Create the logs immediately so they can be opened and watched live.
+    with open(log_path, "w", encoding="utf-8") as f:
+        f.write(f"# Live commentary — backend={comm.backend} model={comm.model}\n")
+        f.write(f"# started {datetime.now().isoformat(timespec='seconds')}\n\n")
+    jsonl_path.touch()
     if not dry:
-        print(f"  Backend: {comm.backend}  (model: {comm.model})\n")
+        print(f"  Backend: {comm.backend}  (model: {comm.model})")
+    print(f"  Commentary log: {log_path.resolve()}")
+    print(f"  Structured    : {jsonl_path.resolve()}\n")
 
     # Choose event source
     if args.replay:
@@ -242,12 +274,39 @@ def main():
         print(f"  Tailing {path}  (min priority {args.min_priority})\n")
         source = tail_events(path, from_start=args.from_start)
 
+    print(f"  Cadence: one filler line per {args.interval:.0f}s; P5 events voiced immediately.\n")
+
     voiced = 0
+    buffer = []          # candidate events waiting to be voiced
+    last_voiced_ts = 0.0
+    IMMEDIATE = 5        # priority >= this is voiced at once (lead change, finish)
+
+    def pick(events):
+        # highest priority, then most recent
+        return sorted(events, key=lambda e: (e['priority'], e['ts']))[-1]
+
     try:
         for event in source:
-            if event.get("priority", 0) >= args.min_priority:
+            if event.get("priority", 0) < args.min_priority:
+                continue
+            ts = event.get("ts", 0)
+
+            # Big moments jump the queue and reset the cadence clock.
+            if event["priority"] >= IMMEDIATE:
                 comm.say(event)
                 voiced += 1
+                buffer.clear()
+                last_voiced_ts = ts
+                continue
+
+            buffer.append(event)
+
+            # Otherwise voice the best buffered event once per interval.
+            if args.interval <= 0 or (ts - last_voiced_ts) >= args.interval:
+                comm.say(pick(buffer))
+                voiced += 1
+                buffer.clear()
+                last_voiced_ts = ts
     except KeyboardInterrupt:
         pass
     print(f"\n  {voiced} lines of commentary generated.")
