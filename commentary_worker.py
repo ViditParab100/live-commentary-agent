@@ -159,7 +159,7 @@ class Commentator:
         payload = {
             "model": self.model,
             "reasoning_effort": "low",
-            "max_tokens": 3000,           # reasoning models need headroom to FINISH
+            "max_tokens": 4096,           # starter-tier ceiling; max headroom to FINISH
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
@@ -168,14 +168,13 @@ class Commentator:
         r = requests.post(self.SARVAM_URL,
                           headers={"Authorization": f"Bearer {self._key}",
                                    "Content-Type": "application/json"},
-                          json=payload, timeout=90)
+                          json=payload, timeout=120)
         data = r.json()
         if "choices" not in data:
-            return f"(sarvam error: {data.get('error', {}).get('message', r.text[:120])})"
-        text = (data["choices"][0]["message"].get("content") or "").strip()
-        if not text:
-            text = "(model still thinking — increase max_tokens)"
-        return text
+            print(f"  [sarvam error: {data.get('error', {}).get('message', r.text[:120])}]")
+            return None
+        # None content = reasoning used the whole budget; skip rather than emit junk.
+        return (data["choices"][0]["message"].get("content") or "").strip() or None
 
     def _anthropic(self, prompt):
         out = []
@@ -205,6 +204,9 @@ class Commentator:
         except Exception as e:
             # A single API timeout/error must never kill the long-running worker.
             print(f"\n  [commentary skipped — {type(e).__name__}: {e}]", flush=True)
+            return
+        if not text:
+            print(f"\n  [commentary skipped — no content from {self.backend}]", flush=True)
             return
         dt = time.time() - t0
         clock = datetime.fromtimestamp(event["ts"]).strftime("%H:%M:%S")
