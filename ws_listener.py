@@ -13,6 +13,10 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from datetime import datetime
 from pathlib import Path
 
+# Force UTF-8 output on Windows so block chars print correctly
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 OUT_DIR = Path("spy_results")
 OUT_DIR.mkdir(exist_ok=True)
 session_file = OUT_DIR / f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
@@ -29,7 +33,7 @@ def ts(ms):
 def bar(pct, width=20):
     if pct is None: return '?' * width
     filled = round(pct / 100 * width)
-    return '█' * filled + '░' * (width - filled)
+    return '#' * filled + '.' * (width - filled)
 
 
 def detect_overtakes(old_order, new_order):
@@ -65,11 +69,11 @@ def handle_race_state(ev):
     prev_order = new_order
 
     # --- Print leaderboard ---
-    print(f"\n{'─'*62}")
+    print(f"\n{'-'*62}")
     print(f"  #{update_count:<4}  {t}   {track}  ·  {laps} laps  ·  {status}")
-    print(f"{'─'*62}")
+    print(f"{'-'*62}")
     print(f"  {'POS':<4} {'DRIVER':<22} {'COMPLETION':>10}   TRACK PROGRESS")
-    print(f"  {'─'*58}")
+    print(f"  {'-'*58}")
 
     for d in drivers:
         name  = d.get('name', '?')

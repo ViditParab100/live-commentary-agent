@@ -351,57 +351,6 @@
     }
 
     // -----------------------------------------------------------------------
-    // Canvas overlay — SVG injected directly on top of canvas#raceCanvas
-    // -----------------------------------------------------------------------
-    function createCanvasOverlay() {
-        if (overlayCreated) return;
-        const canvas = document.getElementById('raceCanvas');
-        if (!canvas || !canvas.offsetWidth) return;
-
-        // Parent must be position:relative for absolute child to work
-        const parent = canvas.parentElement;
-        if (getComputedStyle(parent).position === 'static') {
-            parent.style.position = 'relative';
-        }
-
-        const W = canvas.offsetWidth || canvas.width || MAP_W;
-        const H = canvas.offsetHeight || canvas.height || MAP_H;
-
-        // Wrapper div exactly covering the canvas
-        const wrap = el('div', {
-            style: `position:absolute;top:${canvas.offsetTop}px;left:${canvas.offsetLeft}px;
-                    width:${W}px;height:${H}px;pointer-events:none;z-index:500;`,
-        });
-        wrap.id = '_spy_overlay_wrap';
-
-        // SVG — viewBox matches our 260×170 coordinate space, stretched to canvas size
-        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.setAttribute('viewBox', `0 0 ${MAP_W} ${MAP_H}`);
-        svg.setAttribute('width', W);
-        svg.setAttribute('height', H);
-        svg.setAttribute('preserveAspectRatio', 'none');
-        svg.style.cssText = 'display:block;overflow:visible;';
-
-        // Hidden path for getPointAtLength() maths
-        const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        pathEl.id = '_spy_track_path';
-        pathEl.setAttribute('d', FALLBACK_PATH);
-        pathEl.setAttribute('fill', 'none');
-        pathEl.setAttribute('stroke', 'none');
-        svg.appendChild(pathEl);
-        trackPathEl = pathEl;
-
-        // Driver dots layer
-        const driverLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        driverLayer.id = '_spy_driver_layer';
-        svg.appendChild(driverLayer);
-
-        wrap.appendChild(svg);
-        parent.appendChild(wrap);
-        overlayCreated = true;
-    }
-
-    // -----------------------------------------------------------------------
     // Render
     // -----------------------------------------------------------------------
     function renderAll() {
@@ -414,124 +363,13 @@
         const latest = logEntries.find(e => e.type === 'race_state');
         if (!latest) return;
 
-        // Canvas overlay renders always (not gated by panel open)
-        createCanvasOverlay();
-        renderMap(latest.data);
-
+        // We do NOT draw our own markers on the canvas — the game already renders
+        // moving car markers along the track. We only show the leaderboard panel
+        // and stream marker/standings data to the local server.
         if (panelOpen) {
             renderLeaderboard(latest.data);
             renderFooter(latest.data);
         }
-    }
-
-    function renderMap(state) {
-        const layer = document.getElementById('_spy_driver_layer');
-        if (!layer) return;
-
-        const cm      = state.canvas_markers;
-        const myName  = state.my_info?.name;
-        const canvas  = document.getElementById('raceCanvas');
-        const cW      = canvas ? (canvas.offsetWidth  || canvas.width  || MAP_W) : MAP_W;
-        const cH      = canvas ? (canvas.offsetHeight || canvas.height || MAP_H) : MAP_H;
-
-        // --- Canvas marker mode ---
-        // If we detected at least as many clusters as drivers, use pixel positions directly.
-        const useCanvas = cm && !cm.error && cm.markers && cm.markers.length >= state.drivers.length;
-
-        if (useCanvas) {
-            // Markers are sorted by cluster size (most pixels = most confident).
-            // Match to drivers by completion% order: highest completion = first marker.
-            // Drivers from DOM are already sorted by position (idx 0 = leader).
-            const sorted = [...cm.markers].sort((a, b) => {
-                // Sort markers by their horizontal+vertical position to get race order
-                // Use distance from finish approximation: top-right area = further along
-                return (b.x + b.y) - (a.x + a.y);
-            });
-
-            state.drivers.forEach((d, idx) => {
-                const m = sorted[idx];
-                if (!m) return;
-                // Scale marker canvas coords → our SVG viewBox (260×170)
-                const pt    = { x: (m.x / cW) * MAP_W, y: (m.y / cH) * MAP_H };
-                const color = COLORS[idx % COLORS.length];
-                const isMe  = d.name === myName;
-                placeDriver(d, idx, pt, color, isMe, layer);
-            });
-
-            // Log to pill: confirm canvas mode is active
-            if (pill) pill.title = `canvas mode — ${cm.markers.length} markers`;
-            return;
-        }
-
-        // --- Fallback: SVG path mode (completion% → getPointAtLength) ---
-        if (!trackPathEl) return;
-
-        if (state.track_code) {
-            const d = TRACK_PATHS[state.track_code] || FALLBACK_PATH;
-            if (trackPathEl.getAttribute('d') !== d) {
-                trackPathEl.setAttribute('d', d);
-                svgDrivers = {};
-                layer.innerHTML = '';
-            }
-        }
-
-        const totalLen = trackPathEl.getTotalLength();
-
-        state.drivers.forEach((d, idx) => {
-            const pct   = (d.completion ?? 0) / 100;
-            const pt    = trackPathEl.getPointAtLength(pct * totalLen);
-            const color = COLORS[idx % COLORS.length];
-            const isMe  = d.name === myName;
-
-            placeDriver(d, idx, pt, color, isMe, layer);
-        });
-
-        // Remove drivers no longer in the race
-        for (const name of Object.keys(svgDrivers)) {
-            if (!state.drivers.find(d => d.name === name)) {
-                svgDrivers[name].g.remove();
-                delete svgDrivers[name];
-            }
-        }
-    }
-
-    function placeDriver(d, idx, pt, color, isMe, layer) {
-        let g = svgDrivers[d.name]?.g;
-
-        if (!g) {
-            g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-            g.style.transition = 'transform 0.5s ease-out';
-
-            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            circle.setAttribute('r', isMe ? '8' : '6');
-            circle.setAttribute('fill', color);
-            circle.setAttribute('stroke', isMe ? '#fff' : '#222');
-            circle.setAttribute('stroke-width', isMe ? '2.5' : '1.5');
-
-            const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            label.setAttribute('text-anchor', 'middle');
-            label.setAttribute('dy', '0.35em');
-            label.setAttribute('font-size', isMe ? '8' : '7');
-            label.setAttribute('font-family', 'monospace');
-            label.setAttribute('fill', isMe ? '#000' : '#fff');
-            label.setAttribute('font-weight', 'bold');
-            label.setAttribute('pointer-events', 'none');
-            label.textContent = String(d.position);
-
-            const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-            title.textContent = `${d.name} — ${d.completion?.toFixed(1) ?? '?'}%`;
-
-            g.appendChild(circle);
-            g.appendChild(label);
-            g.appendChild(title);
-            layer.appendChild(g);
-            svgDrivers[d.name] = { g, circle, label };
-        }
-
-        svgDrivers[d.name].label.textContent = String(d.position);
-        const titleEl = g.querySelector('title');
-        if (titleEl) titleEl.textContent = `${d.name} — ${d.completion?.toFixed(1) ?? '?'}%`;
-        g.setAttribute('transform', `translate(${pt.x.toFixed(1)}, ${pt.y.toFixed(1)})`);
     }
 
     function renderLeaderboard(state) {
