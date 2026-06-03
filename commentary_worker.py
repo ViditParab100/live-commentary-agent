@@ -120,13 +120,14 @@ class Commentator:
 
     SARVAM_URL = "https://api.sarvam.ai/v1/chat/completions"
 
-    def __init__(self, model=None, dry_run=False, log_path=None, jsonl_path=None):
+    def __init__(self, model=None, dry_run=False, log_path=None, jsonl_path=None, discord=None):
         self.recent = deque(maxlen=6)
         self.backend = "dry"
         self.model = model
         self._client = None
         self.log_path = log_path       # human-readable .txt
         self.jsonl_path = jsonl_path   # structured .jsonl (for Discord etc.)
+        self.discord = discord         # optional DiscordNotifier
 
         if dry_run:
             return
@@ -215,6 +216,8 @@ class Commentator:
                    "latency_s": round(dt, 1)}
             with open(self.jsonl_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(rec) + "\n")
+        if self.discord and self.discord.enabled:
+            self.discord.post(text, event["type"], clock)
 
 
 # --------------------------------------------------------------------------
@@ -232,6 +235,7 @@ def main():
                     help="override model id (else each backend picks its own default)")
     ap.add_argument("--from-start", action="store_true", help="tail from start of events file")
     ap.add_argument("--dry-run", action="store_true", help="print prompts instead of calling Claude")
+    ap.add_argument("--no-discord", action="store_true", help="disable posting to Discord")
     args = ap.parse_args()
 
     # Load .env for ANTHROPIC_API_KEY if present
@@ -250,7 +254,15 @@ def main():
     stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     log_path   = OUT_DIR / f"commentary_{stamp}.txt"
     jsonl_path = OUT_DIR / f"commentary_{stamp}.jsonl"
-    comm = Commentator(model=args.model, dry_run=dry, log_path=log_path, jsonl_path=jsonl_path)
+
+    # Optional Discord output (unless --no-discord)
+    notifier = None
+    if not args.no_discord:
+        from discord_notify import DiscordNotifier
+        notifier = DiscordNotifier()
+
+    comm = Commentator(model=args.model, dry_run=dry, log_path=log_path,
+                       jsonl_path=jsonl_path, discord=notifier)
     # Create the logs immediately so they can be opened and watched live.
     with open(log_path, "w", encoding="utf-8") as f:
         f.write(f"# Live commentary — backend={comm.backend} model={comm.model}\n")
@@ -259,7 +271,12 @@ def main():
     if not dry:
         print(f"  Backend: {comm.backend}  (model: {comm.model})")
     print(f"  Commentary log: {log_path.resolve()}")
-    print(f"  Structured    : {jsonl_path.resolve()}\n")
+    print(f"  Structured    : {jsonl_path.resolve()}")
+    if notifier and notifier.enabled:
+        print(f"  Discord       : ON  (mode: {notifier.mode})")
+    else:
+        print(f"  Discord       : off  (set DISCORD_WEBHOOK_URL or DISCORD_BOT_TOKEN+DISCORD_CHANNEL_ID)")
+    print()
 
     # Choose event source
     if args.replay:
