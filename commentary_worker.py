@@ -50,15 +50,33 @@ OUT_DIR = Path("spy_results")
 # The commentator persona — sent as a cached system prompt so repeated calls
 # across the race hit the prompt cache instead of re-billing these tokens.
 SYSTEM_PROMPT = (
-    "You are an energetic live motorsport commentator for Torn City street races. "
-    "You receive a stream of race events. For each NEW event, deliver ONE short, "
-    "punchy line of commentary (max 2 sentences) as if broadcasting live. "
-    "Be vivid and specific, use the driver names, and react to the moment. "
-    "IMPORTANT: the names in events are player USERNAMES (e.g. 'lockup', 'firefly50', "
-    "'Star_Vader') — always treat them as the racers' names, never as racing terms or "
-    "incidents, even if a username looks like a normal word. "
-    "Do not repeat yourself, do not add quotation marks, do not narrate that you "
-    "are an AI. Vary your phrasing across calls."
+    "You are a seasoned live motorsport commentator for Torn City street races, "
+    "broadcasting to a passionate audience. You have a co-commentator (implied, "
+    "never named) — occasionally throw to them with 'and as we were just saying…' "
+    "or 'you have to wonder…' but keep the focus on YOU delivering the broadcast.\n\n"
+
+    "STYLE:\n"
+    "- Sound like a real broadcast. Vary your energy: excited on overtakes and "
+    "battles, measured and analytical during lulls, building dread on the final lap.\n"
+    "- Write 2–4 sentences per event. Big moments (lead_change, race_finished, "
+    "pre_race) may go to 5. Minor events (closing, battle) stay at 2–3.\n"
+    "- Reference what happened earlier when it adds drama. The 'Recent commentary' "
+    "list is your broadcast memory — use it to call back to past moments.\n"
+    "- Fill the air naturally between action: remark on a driver quietly climbing "
+    "the order, imagine the crowd atmosphere, speculate on tyre wear or fuel "
+    "strategy, drop a made-up-but-plausible stat ('that's the second time this "
+    "lap they've gone wheel-to-wheel'). Keep invented details brief and credible.\n"
+    "- For 'race_update' (quiet stretches): summarise who leads, the key gaps, "
+    "and add one piece of colour — atmosphere, strategy speculation, or a "
+    "driver to watch.\n"
+    "- For 'pre_race': open the broadcast properly — welcome the audience, set "
+    "the scene, name 2–3 drivers to watch and why.\n\n"
+
+    "RULES:\n"
+    "- Player USERNAMES are the drivers' names (e.g. 'lockup', 'Star_Vader', "
+    "'firefly50'). Always use them as names, never interpret them as words.\n"
+    "- No quotation marks. No 'As an AI…'. Never start two consecutive lines "
+    "the same way. Vary sentence starters and energy each call."
 )
 
 
@@ -92,10 +110,10 @@ def tail_events(path, from_start=False, poll=0.3):
                     pass
 
 
-def replay_session(path, speed=10.0):
+def replay_session(path, speed=10.0, reverse_rank=False):
     """Replay a raw session JSONL through the detector, yielding events.
     Sleeps between frames by their real time gap divided by `speed`."""
-    det = EventDetector()
+    det = EventDetector(reverse_rank=reverse_rank)
     lines = [l for l in Path(path).read_text(encoding="utf-8", errors="replace").split("\n") if l.strip()]
     prev_ts = None
     for l in lines:
@@ -125,7 +143,7 @@ class Commentator:
     SARVAM_URL = "https://api.sarvam.ai/v1/chat/completions"
 
     def __init__(self, model=None, dry_run=False, log_path=None, jsonl_path=None, discord=None):
-        self.recent = deque(maxlen=6)
+        self.recent = deque(maxlen=8)   # stores generated commentary text for callback context
         self.backend = "dry"
         self.model = model
         self._client = None
@@ -147,13 +165,48 @@ class Commentator:
             import anthropic
             self._client = anthropic.Anthropic()
 
+    # per-type tone hints keep the LLM anchored without over-constraining it
+    _TONE = {
+        'pre_race':      "Open the broadcast: welcome the audience, set the scene, name 2–3 drivers to watch.",
+        'race_start':    "The race is live — burst of energy, build the excitement, get the audience hooked.",
+        'lead_change':   "This is the headline moment. Dramatic, specific, reference who was overtaken.",
+        'overtake':      "React vividly to the move. Name who gained, who lost out, how it unfolded.",
+        'battle':        "Capture the tension of the duel — gaps, stakes, what's at risk for each driver.",
+        'closing':       "Build anticipation — a move could be coming. Speculate, tease the audience.",
+        'final_lap':     "Maximum tension. Everything on the line. Remind listeners of the order.",
+        'race_finished': "Wrap the race with a memorable close. Reflect on the story of the race.",
+        'race_update':   "Summarise the race picture calmly, then add colour: strategy, atmosphere, a driver to watch.",
+    }
+
     def _user_prompt(self, event):
-        recent = "\n".join(f"- {m}" for m in self.recent) or "- (race just beginning)"
+        recent = "\n".join(f"- {m}" for m in self.recent) or "- (broadcast just opening)"
+        tone = self._TONE.get(event['type'], "React naturally and add relevant colour.")
         return (
-            f"Recent events:\n{recent}\n\n"
-            f"NEW EVENT (priority {event['priority']}, {event['type']}):\n"
+            f"Recent commentary (what you have already said — don't repeat it):\n{recent}\n\n"
+            f"NEW EVENT  [{event['type'].upper()}  priority {event['priority']}]:\n"
             f"{event['message']}\n\n"
-            f"Give ONE line of live commentary for this moment."
+            f"Delivery note: {tone}\n"
+            f"Write your next broadcast segment (2–4 sentences)."
+        )
+
+    def _batch_prompt(self, events):
+        recent = "\n".join(f"- {m}" for m in self.recent) or "- (broadcast just opening)"
+        # anchor tone on the highest-priority event in the batch
+        anchor = max(events, key=lambda e: e['priority'])
+        tone = self._TONE.get(anchor['type'], "React naturally and add relevant colour.")
+        event_lines = "\n".join(
+            f"{i + 1}. [{e['type'].upper()}] {e['message']}"
+            for i, e in enumerate(events)
+        )
+        return (
+            f"Recent commentary (don't repeat it):\n{recent}\n\n"
+            f"BATCH — {len(events)} things just happened on track. "
+            f"Weave them into ONE flowing commentary block:\n"
+            f"{event_lines}\n\n"
+            f"Anchor tone (lead event): {tone}\n"
+            f"Write a single connected paragraph (4–6 sentences) that moves "
+            f"through all these moments naturally, as if you caught the audience "
+            f"up on a busy spell of racing."
         )
 
     # --- backends ---------------------------------------------------------
@@ -171,11 +224,18 @@ class Commentator:
         # Sarvam is a reasoning model and can spend the entire 4096-token cap
         # "thinking", returning content=None. Reasoning length varies between
         # calls, so retry once — a second attempt often fits and yields text.
+        # Timeout is 35 s per attempt so a slow call fails fast enough to keep
+        # the live race commentary flowing.
         for attempt in range(2):
-            r = requests.post(self.SARVAM_URL,
-                              headers={"Authorization": f"Bearer {self._key}",
-                                       "Content-Type": "application/json"},
-                              json=payload, timeout=120)
+            print(f"  [sarvam] calling (attempt {attempt + 1}/2)…", flush=True)
+            try:
+                r = requests.post(self.SARVAM_URL,
+                                  headers={"Authorization": f"Bearer {self._key}",
+                                           "Content-Type": "application/json"},
+                                  json=payload, timeout=35)
+            except requests.exceptions.Timeout:
+                print(f"  [sarvam] timed out on attempt {attempt + 1}", flush=True)
+                continue
             data = r.json()
             if "choices" not in data:
                 print(f"  [sarvam error: {data.get('error', {}).get('message', r.text[:120])}]")
@@ -183,12 +243,13 @@ class Commentator:
             text = (data["choices"][0]["message"].get("content") or "").strip()
             if text:
                 return text
+            print(f"  [sarvam] attempt {attempt + 1} returned no content (reasoning overflow)", flush=True)
         return None  # both attempts exhausted the budget on reasoning
 
     def _anthropic(self, prompt):
         out = []
         with self._client.messages.stream(
-            model=self.model, max_tokens=120,
+            model=self.model, max_tokens=300,
             system=[{"type": "text", "text": SYSTEM_PROMPT,
                      "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": prompt}],
@@ -200,11 +261,11 @@ class Commentator:
     # --- public -----------------------------------------------------------
     def say(self, event):
         prompt = self._user_prompt(event)
-        self.recent.append(event["message"])
 
         if self.backend == "dry":
             print(f"\n[would-commentate P{event['priority']} {event['type']}]")
             print(f"  event : {event['message']}")
+            self.recent.append(f"[{event['type']}] {event['message'][:80]}")
             return
 
         t0 = time.time()
@@ -217,6 +278,7 @@ class Commentator:
         if not text:
             print(f"\n  [commentary skipped — no content from {self.backend}]", flush=True)
             return
+        self.recent.append(text)   # feed generated text back as broadcast memory
         dt = time.time() - t0
         clock = datetime.fromtimestamp(event["ts"]).strftime("%H:%M:%S")
         line = f"[{clock}] {event['type']} (+{dt:.0f}s)  {text}"
@@ -232,6 +294,53 @@ class Commentator:
                 f.write(json.dumps(rec) + "\n")
         if self.discord and self.discord.enabled:
             self.discord.post(text, event["type"], clock)
+
+    def say_batch(self, events):
+        """Generate one commentary block from 4-5 buffered events."""
+        if not events:
+            return
+        if len(events) == 1:
+            return self.say(events[0])
+
+        prompt = self._batch_prompt(events)
+        label = "+".join(e["type"] for e in events)
+
+        if self.backend == "dry":
+            print(f"\n[would-batch {len(events)} events: {label}]")
+            for e in events:
+                print(f"  • {e['message'][:80]}")
+            self.recent.append(f"[batch] {label}")
+            return
+
+        t0 = time.time()
+        try:
+            text = self._sarvam(prompt) if self.backend == "sarvam" else self._anthropic(prompt)
+        except Exception as e:
+            print(f"\n  [batch skipped — {type(e).__name__}: {e}]", flush=True)
+            return
+        if not text:
+            print(f"\n  [batch skipped — no content from {self.backend}]", flush=True)
+            return
+
+        self.recent.append(text)
+        dt = time.time() - t0
+        # timestamp of the most recent event in the batch
+        latest = max(events, key=lambda e: e["ts"])
+        clock = datetime.fromtimestamp(latest["ts"]).strftime("%H:%M:%S")
+        line = f"[{clock}] BATCH({len(events)}) (+{dt:.0f}s)  {text}"
+        print(f"\n>> {line}", flush=True)
+        if self.log_path:
+            with open(self.log_path, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+        if self.jsonl_path:
+            rec = {"ts": latest["ts"], "time": clock, "type": "batch",
+                   "events": [e["type"] for e in events],
+                   "priority": max(e["priority"] for e in events),
+                   "text": text, "latency_s": round(dt, 1)}
+            with open(self.jsonl_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(rec) + "\n")
+        if self.discord and self.discord.enabled:
+            self.discord.post(text, "race_update", clock)
 
 
 # --------------------------------------------------------------------------
@@ -250,6 +359,11 @@ def main():
     ap.add_argument("--from-start", action="store_true", help="tail from start of events file")
     ap.add_argument("--dry-run", action="store_true", help="print prompts instead of calling Claude")
     ap.add_argument("--no-discord", action="store_true", help="disable posting to Discord")
+    ap.add_argument(
+        "--reverse-rank", action="store_true",
+        help="Force reverse ranking for all races (last→1st). "
+             "Races named 'KOSL' are auto-reversed regardless of this flag.",
+    )
     args = ap.parse_args()
 
     # Load .env (override stale system-env keys so .env is authoritative)
@@ -295,7 +409,7 @@ def main():
     # Choose event source
     if args.replay:
         print(f"  Replaying {args.replay} at {args.speed}x  (min priority {args.min_priority})\n")
-        source = replay_session(args.replay, args.speed)
+        source = replay_session(args.replay, args.speed, reverse_rank=args.reverse_rank)
     else:
         path = args.events or latest_events_file()
         if not path:
@@ -305,42 +419,83 @@ def main():
         print(f"  Tailing {path}  (min priority {args.min_priority})\n")
         source = tail_events(path, from_start=args.from_start)
 
-    print(f"  Cadence: one filler line per {args.interval:.0f}s; P5 events voiced immediately.\n")
+    current_interval = args.interval   # may drop to ENDGAME_INTERVAL during reverse endgame
+    ENDGAME_INTERVAL = 30.0
+    NORMAL_STOP_AT   = 5               # normal mode: stop after this many finishers
+    IMMEDIATE  = 5
+    BATCH_SIZE = 5
+
+    print(f"  Cadence: batch of {BATCH_SIZE} per {current_interval:.0f}s; "
+          f"P5 events voiced immediately.\n")
 
     voiced = 0
-    buffer = []          # candidate events waiting to be voiced
-    last_voiced_ts = 0.0
-    IMMEDIATE = 5        # priority >= this is voiced at once (lead change, finish)
+    buffer = []
+    last_voiced_ts = None   # None = not yet set; initialised on the first event seen
+    finished_count = 0
+    total_drivers  = 0
 
-    def pick(events):
-        # highest priority, then most recent
-        return sorted(events, key=lambda e: (e['priority'], e['ts']))[-1]
+    def flush_and_stop(reason):
+        nonlocal voiced
+        if buffer:
+            comm.say_batch(buffer)
+            voiced += 1
+            buffer.clear()
+        print(f"\n  [{reason} — commentary closed after {voiced} blocks]", flush=True)
 
     try:
         for event in source:
             if event.get("priority", 0) < args.min_priority:
                 continue
-            ts = event.get("ts", 0)
+            ts  = event.get("ts", 0)
+            evt = event.get("type", "")
 
-            # Big moments jump the queue and reset the cadence clock.
-            if event["priority"] >= IMMEDIATE:
+            # --- track individual driver finishes ---
+            if evt == "driver_finished":
+                d = event.get("data", {})
+                finished_count = d.get("finished_count", finished_count)
+                total_drivers  = d.get("total", total_drivers)
+                remaining      = d.get("remaining", total_drivers - finished_count)
+
+                # Reverse endgame: only top-5 (last finishers) remain — tighten cadence
+                if args.reverse_rank and remaining <= 5 and current_interval > ENDGAME_INTERVAL:
+                    current_interval = ENDGAME_INTERVAL
+                    print(f"\n  [endgame — {remaining} drivers left, interval → {ENDGAME_INTERVAL:.0f}s]",
+                          flush=True)
+
+            # Anchor the clock on the very first event so the first batch fires
+            # ~interval seconds into the race, not immediately.
+            if last_voiced_ts is None:
+                last_voiced_ts = ts
+
+            # --- voice the event (immediate or buffered) ---
+            if event["priority"] >= IMMEDIATE or evt == "pre_race":
                 comm.say(event)
                 voiced += 1
                 buffer.clear()
                 last_voiced_ts = ts
-                continue
+            else:
+                buffer.append(event)
+                # batch_size caps how many events go into one block, but ONLY
+                # the interval controls when a block fires — no more firing
+                # every 15 seconds just because 5 events accumulated.
+                interval_elapsed = current_interval <= 0 or (ts - last_voiced_ts) >= current_interval
+                if interval_elapsed and buffer:
+                    comm.say_batch(buffer[:BATCH_SIZE])
+                    voiced += 1
+                    buffer = buffer[BATCH_SIZE:]
+                    last_voiced_ts = ts
 
-            buffer.append(event)
+            # --- stop conditions (checked after voicing so last event is always included) ---
+            if not args.reverse_rank and finished_count >= NORMAL_STOP_AT:
+                flush_and_stop(f"top {NORMAL_STOP_AT} have finished")
+                break
+            if args.reverse_rank and total_drivers > 0 and finished_count >= total_drivers:
+                flush_and_stop("all drivers have finished")
+                break
 
-            # Otherwise voice the best buffered event once per interval.
-            if args.interval <= 0 or (ts - last_voiced_ts) >= args.interval:
-                comm.say(pick(buffer))
-                voiced += 1
-                buffer.clear()
-                last_voiced_ts = ts
     except KeyboardInterrupt:
         pass
-    print(f"\n  {voiced} lines of commentary generated.")
+    print(f"\n  {voiced} commentary blocks generated.")
 
 
 if __name__ == "__main__":

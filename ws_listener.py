@@ -7,6 +7,7 @@ Usage:
     python ws_listener.py
 """
 
+import argparse
 import json
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -24,9 +25,10 @@ OUT_DIR.mkdir(exist_ok=True)
 _stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 session_file = OUT_DIR / f"session_{_stamp}.jsonl"   # raw frames
 events_file  = OUT_DIR / f"events_{_stamp}.jsonl"    # detected events (for commentary worker)
+events_file.touch()   # create immediately so commentary_worker finds this session's file
 
 update_count = 0
-detector = EventDetector()   # stateful across the whole race
+detector = None   # created in main() after args are parsed
 
 
 def ts(ms):
@@ -141,13 +143,28 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    global detector
+
+    ap = argparse.ArgumentParser(description="Torn Racing Spy — Live Leaderboard Listener")
+    ap.add_argument(
+        "--reverse-rank", action="store_true",
+        help="Force reverse ranking for all races (last→1st). "
+             "Races named 'KOSL' are auto-reversed regardless of this flag.",
+    )
+    args = ap.parse_args()
+
+    detector = EventDetector(reverse_rank=args.reverse_rank)
+
     port = 8766
+    mode_tag = "  [REVERSE RANK mode — last place scores first]\n" if args.reverse_rank else ""
     print(f"\n{'#'*62}")
     print(f"  TORN RACING SPY  —  Live Leaderboard Listener")
     print(f"  http://localhost:{port}")
     print(f"  Session log: {session_file.resolve()}")
     print(f"  Events log : {events_file.resolve()}")
     print(f"{'#'*62}\n")
+    if mode_tag:
+        print(mode_tag)
     print("  Waiting for race data...\n")
     sys.stdout.flush()
     HTTPServer(('localhost', port), Handler).serve_forever()
