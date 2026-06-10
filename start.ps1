@@ -20,7 +20,7 @@ Start-Process powershell -ArgumentList '-NoExit', '-Command',
 # Give it a moment to bind port 8766, then start the commentary worker
 Start-Sleep -Seconds 3
 Start-Process powershell -ArgumentList '-NoExit', '-Command',
-    "Set-Location '$PSScriptRoot'; python commentary_worker.py --min-priority 3 --interval 45 --from-start"
+    "Set-Location '$PSScriptRoot'; python commentary_worker.py --min-priority 3 --interval 120 --from-start"
 
 Write-Host "Launched listener + commentary worker in two windows."
 Write-Host "Make sure the TamperMonkey pill shows on the Torn racing page, then race."

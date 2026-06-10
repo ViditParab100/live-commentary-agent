@@ -48,6 +48,8 @@ class EventDetector:
         self.prev_comp  = {}       # name -> completion last frame (new-race detection)
         self.reverse_rank = reverse_rank
         self.pre_race_fired = False
+        self.finished_drivers = set()   # names that have reached 100 % completion
+        self.total_drivers = 0
 
     def _reset_for_new_race(self):
         """A new race started (completions reset). Clear per-race state so the
@@ -62,6 +64,8 @@ class EventDetector:
         self.last_tick = None
         self.last_leader = None
         self.pre_race_fired = False
+        self.finished_drivers = set()
+        self.total_drivers = 0
 
     # -- reverse-rank helper ------------------------------------------------
     def _maybe_reverse_rank(self, drivers, track):
@@ -151,9 +155,31 @@ class EventDetector:
         racing_active = any(comp[dr['name']] is not None and 0 < comp[dr['name']] < 100 for dr in drivers)
         if not self.started and not self.finished and racing_active:
             self.started = True
+            self.total_drivers = len(drivers)
             names = ', '.join(dr['name'] for dr in drivers)
             emit('race_start', 4, f"And they're off at {track}! {len(drivers)} drivers: {names}.",
-                 track=track, laps=laps)
+                 track=track, laps=laps, total=len(drivers))
+
+        # --- individual driver finishes (completion reaches 100 %) ---
+        if self.started:
+            for dr in drivers:
+                name = dr['name']
+                c = comp[name]
+                if c is not None and c >= 100 and name not in self.finished_drivers:
+                    self.finished_drivers.add(name)
+                    pos = dr['position']
+                    remaining = self.total_drivers - len(self.finished_drivers)
+                    # In reverse mode the last finishers ARE the podium — voice them immediately.
+                    in_endgame = self.reverse_rank and remaining <= 5
+                    prio = 5 if in_endgame else 4
+                    emit('driver_finished', prio,
+                         f"{name} crosses the line in P{pos}! "
+                         f"({len(self.finished_drivers)} of {self.total_drivers} done, "
+                         f"{remaining} still racing)",
+                         driver=name, position=pos,
+                         finished_count=len(self.finished_drivers),
+                         total=self.total_drivers,
+                         remaining=remaining)
 
         # --- position changes / overtakes (vs previous frame) ---
         if self.prev_pos:

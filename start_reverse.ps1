@@ -21,7 +21,7 @@ Start-Process powershell -ArgumentList '-NoExit', '-Command',
 # Give it a moment to bind port 8766, then start the commentary worker in reverse-rank mode
 Start-Sleep -Seconds 3
 Start-Process powershell -ArgumentList '-NoExit', '-Command',
-    "Set-Location '$PSScriptRoot'; python commentary_worker.py --min-priority 3 --interval 45 --from-start --reverse-rank"
+    "Set-Location '$PSScriptRoot'; python commentary_worker.py --min-priority 3 --interval 120 --from-start --reverse-rank"
 
 Write-Host "Launched listener + commentary worker in REVERSE RANK mode."
 Write-Host "(Last place scores first; crashed drivers are always last.)"
