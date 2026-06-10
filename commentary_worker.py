@@ -57,6 +57,9 @@ SYSTEM_PROMPT = (
     "IMPORTANT: the names in events are player USERNAMES (e.g. 'lockup', 'firefly50', "
     "'Star_Vader') — always treat them as the racers' names, never as racing terms or "
     "incidents, even if a username looks like a normal word. "
+    "For 'pre_race' events: deliver an exciting opening welcome, pick 2-3 drivers "
+    "from the lineup to hype as ones to watch, and if a countdown is mentioned work "
+    "it naturally into the line (e.g. 'engines warming with just seconds to go'). "
     "Do not repeat yourself, do not add quotation marks, do not narrate that you "
     "are an AI. Vary your phrasing across calls."
 )
@@ -92,10 +95,10 @@ def tail_events(path, from_start=False, poll=0.3):
                     pass
 
 
-def replay_session(path, speed=10.0):
+def replay_session(path, speed=10.0, reverse_rank=False):
     """Replay a raw session JSONL through the detector, yielding events.
     Sleeps between frames by their real time gap divided by `speed`."""
-    det = EventDetector()
+    det = EventDetector(reverse_rank=reverse_rank)
     lines = [l for l in Path(path).read_text(encoding="utf-8", errors="replace").split("\n") if l.strip()]
     prev_ts = None
     for l in lines:
@@ -171,11 +174,18 @@ class Commentator:
         # Sarvam is a reasoning model and can spend the entire 4096-token cap
         # "thinking", returning content=None. Reasoning length varies between
         # calls, so retry once — a second attempt often fits and yields text.
+        # Timeout is 35 s per attempt so a slow call fails fast enough to keep
+        # the live race commentary flowing.
         for attempt in range(2):
-            r = requests.post(self.SARVAM_URL,
-                              headers={"Authorization": f"Bearer {self._key}",
-                                       "Content-Type": "application/json"},
-                              json=payload, timeout=120)
+            print(f"  [sarvam] calling (attempt {attempt + 1}/2)…", flush=True)
+            try:
+                r = requests.post(self.SARVAM_URL,
+                                  headers={"Authorization": f"Bearer {self._key}",
+                                           "Content-Type": "application/json"},
+                                  json=payload, timeout=35)
+            except requests.exceptions.Timeout:
+                print(f"  [sarvam] timed out on attempt {attempt + 1}", flush=True)
+                continue
             data = r.json()
             if "choices" not in data:
                 print(f"  [sarvam error: {data.get('error', {}).get('message', r.text[:120])}]")
@@ -183,6 +193,7 @@ class Commentator:
             text = (data["choices"][0]["message"].get("content") or "").strip()
             if text:
                 return text
+            print(f"  [sarvam] attempt {attempt + 1} returned no content (reasoning overflow)", flush=True)
         return None  # both attempts exhausted the budget on reasoning
 
     def _anthropic(self, prompt):
@@ -250,6 +261,11 @@ def main():
     ap.add_argument("--from-start", action="store_true", help="tail from start of events file")
     ap.add_argument("--dry-run", action="store_true", help="print prompts instead of calling Claude")
     ap.add_argument("--no-discord", action="store_true", help="disable posting to Discord")
+    ap.add_argument(
+        "--reverse-rank", action="store_true",
+        help="Force reverse ranking for all races (last→1st). "
+             "Races named 'KOSL' are auto-reversed regardless of this flag.",
+    )
     args = ap.parse_args()
 
     # Load .env (override stale system-env keys so .env is authoritative)
@@ -295,7 +311,7 @@ def main():
     # Choose event source
     if args.replay:
         print(f"  Replaying {args.replay} at {args.speed}x  (min priority {args.min_priority})\n")
-        source = replay_session(args.replay, args.speed)
+        source = replay_session(args.replay, args.speed, reverse_rank=args.reverse_rank)
     else:
         path = args.events or latest_events_file()
         if not path:
@@ -323,7 +339,8 @@ def main():
             ts = event.get("ts", 0)
 
             # Big moments jump the queue and reset the cadence clock.
-            if event["priority"] >= IMMEDIATE:
+            # pre_race also fires immediately — it's the opening, there's nothing to buffer.
+            if event["priority"] >= IMMEDIATE or event.get("type") == "pre_race":
                 comm.say(event)
                 voiced += 1
                 buffer.clear()

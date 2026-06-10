@@ -24,6 +24,7 @@ import requests
 DISCORD_API = "https://discord.com/api/v10"
 
 EVENT_EMOJI = {
+    "pre_race":      "🎙️",
     "race_start":    "🚦",
     "lead_change":   "🔄",
     "overtake":      "⏫",

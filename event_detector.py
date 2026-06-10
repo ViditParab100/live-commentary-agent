@@ -36,7 +36,7 @@ def gap_laps(comp_ahead, comp_behind, laps):
 
 
 class EventDetector:
-    def __init__(self):
+    def __init__(self, reverse_rank=False):
         self.prev_pos   = {}       # name -> position (previous frame)
         self.gap_hist   = {}       # (ahead, behind) -> deque[(ts, gap)]
         self.cooldowns  = {}       # (type, key) -> last_ts
@@ -46,6 +46,8 @@ class EventDetector:
         self.last_leader = None
         self.last_tick  = None     # ts of last periodic race-update heartbeat
         self.prev_comp  = {}       # name -> completion last frame (new-race detection)
+        self.reverse_rank = reverse_rank
+        self.pre_race_fired = False
 
     def _reset_for_new_race(self):
         """A new race started (completions reset). Clear per-race state so the
@@ -59,6 +61,29 @@ class EventDetector:
         self.finished = False
         self.last_tick = None
         self.last_leader = None
+        self.pre_race_fired = False
+
+    # -- reverse-rank helper ------------------------------------------------
+    def _maybe_reverse_rank(self, drivers, track):
+        """KOSL rule: last-to-first scoring. Crashed drivers (d['crashed']=True)
+        are excluded from the reversal and always sort last."""
+        if not (self.reverse_rank or (track or '').upper() == 'KOSL'):
+            return drivers
+        non_crashed = sorted(
+            [d for d in drivers if not d.get('crashed', False)],
+            key=lambda d: d['position'],
+        )
+        crashed = sorted(
+            [d for d in drivers if d.get('crashed', False)],
+            key=lambda d: d['position'],
+        )
+        n = len(non_crashed)
+        remapped = [
+            {**d, 'position': n - i}          # P1→Pn, Pn→P1
+            for i, d in enumerate(non_crashed)
+        ]
+        # crashed drivers keep their original positions (already last)
+        return sorted(remapped + crashed, key=lambda d: d['position'])
 
     # -- cooldown helper ----------------------------------------------------
     def _ready(self, etype, key, ts):
@@ -81,8 +106,9 @@ class EventDetector:
         status = d.get('status', '')
         events = []
 
-        # sort by position (leader first)
+        # sort by position (leader first), then apply KOSL/reverse-rank remapping
         drivers = sorted(drivers, key=lambda x: x['position'])
+        drivers = self._maybe_reverse_rank(drivers, track)
         cur_pos = {dr['name']: dr['position'] for dr in drivers}
         comp = {dr['name']: dr['completion'] for dr in drivers}
 
@@ -95,17 +121,34 @@ class EventDetector:
         # drops, that driver finished and reset for the next race. The frame is
         # then a mix of old- and new-race values, so skip it entirely to avoid
         # garbage gaps (the "8 laps behind" bug), and reset for the new race.
-        boundary = any(comp[n] < self.prev_comp.get(n, -1) - 5 for n in comp)
-        self.prev_comp = dict(comp)
+        boundary = any(
+            comp[n] is not None and comp[n] < self.prev_comp.get(n, -1) - 5
+            for n in comp
+        )
+        self.prev_comp = {n: c for n, c in comp.items() if c is not None}
         if boundary:
             self._reset_for_new_race()
             return events  # nothing trustworthy to say on a boundary frame
+
+        # --- pre-race opening (lobby frame: all completions None/0, race not yet live) ---
+        # Fires once on the first frame where drivers are known but nobody is moving.
+        # Track/laps may be unknown at this point — that's fine, the LLM works with names.
+        all_idle = all(comp[dr['name']] is None or comp[dr['name']] == 0 for dr in drivers)
+        if not self.pre_race_fired and not self.started and not self.finished and all_idle and drivers:
+            self.pre_race_fired = True
+            names = ', '.join(dr['name'] for dr in drivers)
+            venue = f"at {track}" if track and track != '?' else "in the lobby"
+            countdown = f" Countdown status: {status}." if status else ""
+            emit('pre_race', 4,
+                 f"Pre-race — {len(drivers)} drivers lined up {venue}.{countdown} "
+                 f"Full lineup: {names}.",
+                 track=track, laps=laps, drivers=[dr['name'] for dr in drivers])
 
         # --- race start (first active frame) ---
         # Trigger on active racing, not the status string: the status reflects the
         # PLAYER's state ("Race started", but also "You crashed!", etc.) and would
         # otherwise leave `started` False and suppress the heartbeat for the race.
-        racing_active = any(0 < comp[dr['name']] < 100 for dr in drivers)
+        racing_active = any(comp[dr['name']] is not None and 0 < comp[dr['name']] < 100 for dr in drivers)
         if not self.started and not self.finished and racing_active:
             self.started = True
             names = ', '.join(dr['name'] for dr in drivers)
@@ -136,6 +179,8 @@ class EventDetector:
         # --- adjacent-pair gap analysis: battles, closing, pulling away ---
         for i in range(len(drivers) - 1):
             ahead, behind = drivers[i], drivers[i + 1]
+            if comp[ahead['name']] is None or comp[behind['name']] is None:
+                continue
             key = (ahead['name'], behind['name'])
             g = gap_laps(comp[ahead['name']], comp[behind['name']], laps)
 
@@ -162,14 +207,15 @@ class EventDetector:
 
         # --- final lap (based on the leader) ---
         leader = drivers[0]
-        leader_lap = int(comp[leader['name']] / 100 * laps) + 1
+        leader_comp = comp[leader['name']] or 0
+        leader_lap = int(leader_comp / 100 * laps) + 1
         if not self.final_lap and leader_lap >= laps and laps > 1:
             self.final_lap = True
             emit('final_lap', 5, f"Final lap! {leader['name']} leads onto the last lap at {track}.",
                  leader=leader['name'])
 
         # --- finish ---
-        if not self.finished and ('finish' in status.lower() or 'ended' in status.lower()):
+        if not self.finished and status and ('finish' in status.lower() or 'ended' in status.lower()):
             self.finished = True
             order = ', '.join(f"P{dr['position']} {dr['name']}" for dr in drivers)
             emit('race_finished', 5, f"Chequered flag at {track}! Final order: {order}.",
@@ -183,6 +229,8 @@ class EventDetector:
                 self.last_tick = ts
                 parts = []
                 for dr in drivers[1:]:
+                    if comp[leader['name']] is None or comp[dr['name']] is None:
+                        continue
                     g = gap_laps(comp[leader['name']], comp[dr['name']], laps)
                     parts.append(f"{dr['name']} {g*100:.0f}% of a lap back")
                 gaps = "; ".join(parts) if parts else "leading unchallenged"
